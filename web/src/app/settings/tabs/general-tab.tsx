@@ -43,6 +43,7 @@ const generalFormSchema = z.object({
   enableBackgroundInvestigation: z.boolean(),
   enableDeepThinking: z.boolean(),
   enableWebSearch: z.boolean(),
+  alwaysIncludeRag: z.boolean(),
   reportStyle: z.enum(["academic", "popular_science", "news", "social_media","strategic_investment"]),
 });
 
@@ -146,6 +147,29 @@ export const GeneralTab: Tab = ({
                   </FormControl>
                   <FormDescription>
                     {t("enableWebSearchDescription")}
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="alwaysIncludeRag"
+              render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="alwaysIncludeRag"
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                      <Label className="text-sm" htmlFor="alwaysIncludeRag">
+                        {t("alwaysIncludeRag")}
+                      </Label>
+                    </div>
+                  </FormControl>
+                  <FormDescription>
+                    {t("alwaysIncludeRagDescription")}
                   </FormDescription>
                 </FormItem>
               )}

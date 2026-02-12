@@ -216,6 +216,10 @@ CRAWLER_ENGINE:
   engine: infoquest
 ```
 
+### Base de conocimiento privada
+
+DeerFlow admite bases de conocimiento privadas mediante bases de datos vectoriales autogestionadas ([Qdrant](https://qdrant.tech/), [Milvus](https://milvus.io/)). El embedding es compartido por ingest y recuperación; configure `RAG_EMBEDDING_*` en `.env` (véase la [guía de configuración](docs/configuration_guide.md)). Ejemplos en `.env.example`.
+
 ## Características
 
 ### Capacidades Principales
@@ -226,6 +230,9 @@ CRAWLER_ENGINE:
   - Interfaz API compatible con OpenAI
   - Sistema LLM de múltiples niveles para diferentes complejidades de tareas
 
+- 📥 **Pipeline de ingesta de documentos**
+  - Pipeline asíncrono para ingerir documentos (PDF, DOCX, etc.) con parser MinerU y chunker Chonkie. Configuración de ejemplo en `conf.yaml` bajo `INGESTION_PIPELINE`; véase la [guía de configuración](docs/configuration_guide.md) y la [documentación API](docs/API.md).
+
 ### Herramientas e Integraciones MCP
 
 - 🔍 **Búsqueda y Recuperación**
@@ -233,6 +240,11 @@ CRAWLER_ENGINE:
   - Búsqueda web a través de Tavily, InfoQuest, Brave Search y más
   - Rastreo con Jina e InfoQuest
   - Extracción avanzada de contenido
+  - Soporte para base de conocimiento privada
+
+- 📃 **Integración RAG**
+  - Bases de datos vectoriales autogestionadas: [Qdrant](https://qdrant.tech/), [Milvus](https://milvus.io/)
+  - Mención de archivos desde proveedores RAG en la caja de entrada
 
 - 🔗 **Integración Perfecta con MCP**
   - Amplía capacidades para acceso a dominio privado, gráfico de conocimiento, navegación web y más

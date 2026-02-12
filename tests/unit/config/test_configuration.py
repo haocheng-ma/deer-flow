@@ -1,25 +1,7 @@
 # Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
-import sys
-import types
-
 from src.config.configuration import Configuration
-
-# Patch sys.path so relative import works
-
-# Patch Resource for import
-mock_resource = type("Resource", (), {})
-
-# Patch src.rag.retriever.Resource for import
-
-module_name = "src.rag.retriever"
-if module_name not in sys.modules:
-    retriever_mod = types.ModuleType(module_name)
-    retriever_mod.Resource = mock_resource
-    sys.modules[module_name] = retriever_mod
-
-# Relative import of Configuration
 
 
 def test_default_configuration():

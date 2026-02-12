@@ -22,6 +22,8 @@ class State(MessagesState):
     )
     observations: list[str] = []
     resources: list[Resource] = []
+    has_local_search: bool = False  # True when local_search_tool is available (RAG configured)
+    rag_intent_detected: bool = False  # True when user message indicates intent to use local/uploaded docs
     plan_iterations: int = 0
     current_plan: Plan | str = None
     final_report: str = ""

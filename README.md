@@ -221,29 +221,19 @@ CRAWLER_ENGINE:
 
 ### Private Knowledgebase
 
-DeerFlow supports private knowledgebase such as RAGFlow, Qdrant, Milvus, and VikingDB, so that you can use your private documents to answer questions.
+DeerFlow supports private knowledgebase via self-managed vector databases (Qdrant or Milvus), so that you can use your private documents to answer questions.
 
-- **[RAGFlow](https://ragflow.io/docs/dev/)**: open source RAG engine
+- **[Qdrant](https://qdrant.tech/)**: open source vector database  
+   Embedding is shared by ingest and retrieval; configure `RAG_EMBEDDING_*` in `.env` (see [configuration guide](docs/configuration_guide.md)).
    ```bash
-   # examples in .env.example
-   RAG_PROVIDER=ragflow
-   RAGFLOW_API_URL="http://localhost:9388"
-   RAGFLOW_API_KEY="ragflow-xxx"
-   RAGFLOW_RETRIEVAL_SIZE=10
-   RAGFLOW_CROSS_LANGUAGES=English,Chinese,Spanish,French,German,Japanese,Korean
-   ```
+   RAG_EMBEDDING_PROVIDER=openai
+   RAG_EMBEDDING_MODEL=text-embedding-3-small
+   RAG_EMBEDDING_API_KEY=your_openai_api_key
 
-- **[Qdrant](https://qdrant.tech/)**: open source vector database
-   ```bash
-   # Using Qdrant Cloud or self-hosted
    RAG_PROVIDER=qdrant
    QDRANT_LOCATION=https://xyz-example.eu-central.aws.cloud.qdrant.io:6333
    QDRANT_API_KEY=your_qdrant_api_key
    QDRANT_COLLECTION=documents
-   QDRANT_EMBEDDING_PROVIDER=openai
-   QDRANT_EMBEDDING_MODEL=text-embedding-ada-002
-   QDRANT_EMBEDDING_API_KEY=your_openai_api_key
-   QDRANT_AUTO_LOAD_EXAMPLES=true
    ```
 
 ## Features
@@ -256,6 +246,12 @@ DeerFlow supports private knowledgebase such as RAGFlow, Qdrant, Milvus, and Vik
   - OpenAI-compatible API interface
   - Multi-tier LLM system for different task complexities
 
+- 📥 **Document Ingestion Pipeline**
+  - High-performance async pipeline for ingesting documents (PDF, DOCX, etc.) using MinerU parser and Chonkie chunker.
+  - Configurable concurrency, retry policies, and temporary directory management.
+  - Structured JSON logging for monitoring and debugging.
+  - Example configuration available in `conf.yaml` under `INGESTION_PIPELINE`. See the [configuration guide](docs/configuration_guide.md) and [API documentation](docs/API.md) for pipeline setup and upload.
+
 ### Tools and MCP Integrations
 
 - 🔍 **Search and Retrieval**
@@ -266,7 +262,7 @@ DeerFlow supports private knowledgebase such as RAGFlow, Qdrant, Milvus, and Vik
 
 - 📃 **RAG Integration**
 
-  - Supports multiple vector databases: [Qdrant](https://qdrant.tech/), [Milvus](https://milvus.io/), [RAGFlow](https://github.com/infiniflow/ragflow), VikingDB, MOI, and Dify
+  - Supports self-managed vector databases: [Qdrant](https://qdrant.tech/), [Milvus](https://milvus.io/)
   - Supports mentioning files from RAG providers within the input box
   - Easy switching between different vector databases through configuration
 
@@ -676,7 +672,7 @@ We would like to extend our sincere appreciation to the following projects for t
 - **[LangChain](https://github.com/langchain-ai/langchain)**: Their exceptional framework powers our LLM interactions and chains, enabling seamless integration and functionality.
 - **[LangGraph](https://github.com/langchain-ai/langgraph)**: Their innovative approach to multi-agent orchestration has been instrumental in enabling DeerFlow's sophisticated workflows.
 - **[Novel](https://github.com/steven-tey/novel)**: Their Notion-style WYSIWYG editor supports our report editing and AI-assisted rewriting.
-- **[RAGFlow](https://github.com/infiniflow/ragflow)**: We have achieved support for research on users' private knowledge bases through integration with RAGFlow.
+- **Self-managed vector DB (Qdrant, Milvus)**: Support for research on users' private knowledge bases via Qdrant or Milvus.
 
 These projects exemplify the transformative power of open-source collaboration, and we are proud to build upon their foundations.
 

@@ -1,9 +1,12 @@
 # Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
-from src.rag.retriever import Chunk, Document, Resource, Retriever
+from src.rag import Chunk, Resource, Retriever, RetrievedDocument
+from src.rag.retrieve import build_retriever, reset_retriever
 
 
 def test_chunk_init():
@@ -15,7 +18,7 @@ def test_chunk_init():
 def test_document_init_and_to_dict():
     chunk1 = Chunk(content="chunk1", similarity=0.8)
     chunk2 = Chunk(content="chunk2", similarity=0.7)
-    doc = Document(
+    doc = RetrievedDocument(
         id="doc1", url="http://example.com", title="Title", chunks=[chunk1, chunk2]
     )
     assert doc.id == "doc1"
@@ -31,7 +34,7 @@ def test_document_init_and_to_dict():
 
 def test_document_to_dict_optional_fields():
     chunk = Chunk(content="only chunk", similarity=1.0)
-    doc = Document(id="doc2", chunks=[chunk])
+    doc = RetrievedDocument(id="doc2", chunks=[chunk])
     d = doc.to_dict()
     assert d["id"] == "doc2"
     assert d["content"] == "only chunk"
@@ -60,10 +63,13 @@ def test_retriever_abstract_methods():
             return [Resource(uri="uri", title="title")]
 
         def query_relevant_documents(self, query, resources=[]):
-            return [Document(id="id", chunks=[])]
+            return [RetrievedDocument(id="id", chunks=[])]
 
         async def query_relevant_documents_async(self, query, resources=[]):
-            return [Document(id="id", chunks=[])]
+            return [RetrievedDocument(id="id", chunks=[])]
+
+        def ingest_chunks(self, chunks_with_vectors, resource_metadata):
+            return Resource(uri="uri", title="title", description="Uploaded file")
 
     retriever = DummyRetriever()
     # Test synchronous methods
@@ -74,7 +80,7 @@ def test_retriever_abstract_methods():
     
     docs = retriever.query_relevant_documents("query", resources)
     assert isinstance(docs, list)
-    assert isinstance(docs[0], Document)
+    assert isinstance(docs[0], RetrievedDocument)
     assert docs[0].id == "id"
 
 
@@ -94,10 +100,13 @@ async def test_retriever_async_methods():
             return [Resource(uri="uri_async", title="title_async")]
 
         def query_relevant_documents(self, query, resources=[]):
-            return [Document(id="id", chunks=[])]
+            return [RetrievedDocument(id="id", chunks=[])]
 
         async def query_relevant_documents_async(self, query, resources=[]):
-            return [Document(id="id_async", chunks=[])]
+            return [RetrievedDocument(id="id_async", chunks=[])]
+
+        def ingest_chunks(self, chunks_with_vectors, resource_metadata):
+            return Resource(uri="uri", title="title", description="")
 
     retriever = DummyRetriever()
     
@@ -110,5 +119,38 @@ async def test_retriever_async_methods():
     # Test async query_relevant_documents
     docs = await retriever.query_relevant_documents_async("query", resources)
     assert isinstance(docs, list)
-    assert isinstance(docs[0], Document)
+    assert isinstance(docs[0], RetrievedDocument)
     assert docs[0].id == "id_async"
+
+
+# --- Spec 1.3: build_retriever singleton, reset_retriever ---
+@patch("src.rag.retrieve.builder.SELECTED_RAG_PROVIDER", "milvus")
+@patch("src.rag.retrieve.builder.MilvusProvider")
+def test_build_retriever_singleton_reuse(mock_milvus_provider):
+    """Multiple build_retriever() calls with same provider return the same instance."""
+    reset_retriever()
+    mock_inst = MagicMock()
+    mock_milvus_provider.return_value = mock_inst
+    r1 = build_retriever()
+    r2 = build_retriever()
+    assert r1 is r2
+    mock_milvus_provider.assert_called_once()
+
+
+@patch("src.rag.retrieve.builder.SELECTED_RAG_PROVIDER", "milvus")
+@patch("src.rag.retrieve.builder.MilvusProvider")
+def test_reset_retriever_clears_cache(mock_milvus_provider):
+    """After reset_retriever(), next build_retriever() creates new instance (Provider called twice)."""
+    reset_retriever()
+    mock_milvus_provider.return_value = MagicMock()
+    build_retriever()
+    reset_retriever()
+    build_retriever()
+    assert mock_milvus_provider.call_count == 2
+
+
+@patch("src.rag.retrieve.builder.SELECTED_RAG_PROVIDER", None)
+def test_build_retriever_returns_none_when_no_provider():
+    """build_retriever() returns None when no provider is configured."""
+    reset_retriever()
+    assert build_retriever() is None

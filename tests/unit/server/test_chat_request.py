@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 import src.server.mcp_utils as mcp_utils  # Assuming mcp_utils is the module to test
 from src.config.report_style import ReportStyle
-from src.rag.retriever import Resource
+from src.rag import Resource
 from src.server.chat_request import (
     ChatMessage,
     ChatRequest,

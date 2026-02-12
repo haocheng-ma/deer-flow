@@ -10,7 +10,7 @@ from langchain_core.runnables import RunnableConfig
 
 from src.config.loader import get_bool_env, get_int_env, get_str_env
 from src.config.report_style import ReportStyle
-from src.rag.retriever import Resource
+from src.rag import Resource
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,9 @@ class Configuration:
     enable_web_search: bool = (
         True  # Whether to enable web search, set to False to use only local RAG
     )
+    always_include_rag: bool = (
+        False  # When True, researcher prioritizes local_search_tool for every research
+    )
     interrupt_before_tools: list[str] = field(
         default_factory=list
     )  # List of tool names to interrupt before execution
@@ -72,9 +75,17 @@ class Configuration:
         cls, config: Optional[RunnableConfig] = None
     ) -> "Configuration":
         """Create a Configuration instance from a RunnableConfig."""
-        configurable = (
-            config["configurable"] if config and "configurable" in config else {}
-        )
+        if not config:
+            configurable = {}
+        elif "configurable" in config:
+            configurable = config["configurable"]
+        else:
+            # App may pass a flat config (e.g. workflow_config) without nesting under "configurable"
+            configurable = {
+                k: v
+                for k, v in config.items()
+                if k != "recursion_limit"
+            }
         values: dict[str, Any] = {
             f.name: os.environ.get(f.name.upper(), configurable.get(f.name))
             for f in fields(cls)

@@ -12,8 +12,18 @@ from src.tools.search import get_web_search_tool
 
 
 class TestGetWebSearchTool:
+    @patch("src.tools.search.get_search_config")
     @patch("src.tools.search.SELECTED_SEARCH_ENGINE", SearchEngine.TAVILY.value)
-    def test_get_web_search_tool_tavily(self):
+    def test_get_web_search_tool_tavily(self, mock_get_search_config):
+        mock_get_search_config.return_value = {
+            "include_domains": [],
+            "exclude_domains": [],
+            "include_answer": False,
+            "search_depth": "advanced",
+            "include_raw_content": False,
+            "include_images": True,
+            "include_image_descriptions": True,
+        }
         tool = get_web_search_tool(max_search_results=5)
         assert tool.name == "web_search"
         assert tool.max_results == 5

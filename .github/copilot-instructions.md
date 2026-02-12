@@ -34,7 +34,7 @@ This file provides guidance to GitHub Copilot when working with the DeerFlow rep
    - Search engines: Tavily, Brave Search, DuckDuckGo
    - Web crawling: Jina for content extraction
    - TTS: Volcengine TTS API
-   - RAG: RAGFlow and VikingDB support
+   - RAG: Self-managed vector DB (Qdrant, Milvus)
    - MCP: Model Context Protocol integration
 
 ### Directory Structure

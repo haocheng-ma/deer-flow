@@ -34,14 +34,28 @@
     "pasteConfigBelow": "将您的配置粘贴到下面，然后点击\"添加\"来添加新服务器。",
     "rag": {
       "title": "资源",
-      "description": "在此管理您的知识库资源。上传 Markdown 或文本文件以供检索索引。",
+      "description": "在此管理知识库资源。支持格式：.doc、.docx、.pdf、.ppt、.pptx；单次最多 200 个文件。可通过按钮选择文件或文件夹，或拖拽到此处上传。",
       "upload": "上传",
-      "uploading": "上传中...",
+      "uploadFiles": "选择文件",
+      "uploadFolder": "选择文件夹",
+      "uploading": "上传中…",
+      "uploadingMultiple": "正在上传 {count} 个文件…",
       "uploadSuccess": "文件上传成功",
+      "uploadSuccessMultiple": "已成功上传 {count} 个文件",
+      "uploadPartialSuccess": "成功 {success} 个，失败 {failed} 个",
+      "failReasonParse": "解析失败",
+      "failReasonChunk": "分块失败",
+      "failReasonEmbed": "向量化失败",
+      "failReasonStore": "写入失败",
       "uploadFailed": "文件上传失败",
       "emptyFile": "无法上传空文件",
+      "tooManyFiles": "文件过多（单次最多 {max} 个）",
+      "invalidFileType": "不支持的文件类型：{name}。允许：.doc、.docx、.pdf、.ppt、.pptx",
       "loading": "正在加载资源...",
-      "noResources": "未找到资源。上传文件以开始使用。"
+      "noResources": "未找到资源。上传文件以开始使用。",
+      "noResourcesHint": "支持 .doc、.docx、.pdf、.ppt、.pptx；可拖拽或点击上传。",
+      "dropHint": "将文件或文件夹拖到此处上传",
+      "dropNoAllowedFiles": "拖入的内容中没有允许的文件类型（.doc、.docx、.pdf、.ppt、.pptx）"
     },
     "add": "添加",
     "general": {
@@ -57,7 +71,9 @@
       "maxSearchResults": "最大搜索结果数",
       "maxSearchResultsDescription": "默认情况下，每个搜索步骤有 3 个结果。",
       "enableWebSearch": "启用网络搜索",
-      "enableWebSearchDescription": "禁用后将仅使用本地 RAG 知识库。适用于无网络环境。"
+      "enableWebSearchDescription": "禁用后将仅使用本地 RAG 知识库。适用于无网络环境。",
+      "alwaysIncludeRag": "始终优先使用本地 RAG",
+      "alwaysIncludeRagDescription": "开启后，每次研究都会优先使用本地知识库。"
     },
     "mcp": {
       "title": "MCP 服务器",

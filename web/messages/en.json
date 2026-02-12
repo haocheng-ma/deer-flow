@@ -34,14 +34,28 @@
     "pasteConfigBelow": "Paste your config below and click \"Add\" to add new servers.",
     "rag": {
       "title": "Resources",
-      "description": "Manage your knowledge base resources here. Upload markdown or text files to be indexed for retrieval.",
+      "description": "Manage your knowledge base here. Supported: .doc, .docx, .pdf, .ppt, .pptx; max 200 files per upload. Use the button to select files or folder, or drag and drop here.",
       "upload": "Upload",
+      "uploadFiles": "Select files",
+      "uploadFolder": "Select folder",
       "uploading": "Uploading...",
+      "uploadingMultiple": "Uploading {count} files…",
       "uploadSuccess": "File uploaded successfully",
+      "uploadSuccessMultiple": "{count} files uploaded successfully",
+      "uploadPartialSuccess": "{success} succeeded, {failed} failed",
+      "failReasonParse": "Parse failed",
+      "failReasonChunk": "Chunk failed",
+      "failReasonEmbed": "Embed failed",
+      "failReasonStore": "Store failed",
       "uploadFailed": "Failed to upload file",
       "emptyFile": "Cannot upload an empty file",
+      "tooManyFiles": "Too many files (max {max} per request)",
+      "invalidFileType": "Invalid file type: {name}. Allowed: .doc, .docx, .pdf, .ppt, .pptx",
       "loading": "Loading resources...",
-      "noResources": "No resources found. Upload a file to get started."
+      "noResources": "No resources found. Upload a file to get started.",
+      "noResourcesHint": "Supported: .doc, .docx, .pdf, .ppt, .pptx. Drag and drop or click to upload.",
+      "dropHint": "Drop files or folder here to upload",
+      "dropNoAllowedFiles": "No allowed files (.doc, .docx, .pdf, .ppt, .pptx) in the dropped items"
     },
     "add": "Add",
     "general": {
@@ -57,7 +71,9 @@
       "maxSearchResults": "Max search results",
       "maxSearchResultsDescription": "By default, each search step has 3 results.",
       "enableWebSearch": "Enable web search",
-      "enableWebSearchDescription": "When disabled, only local RAG knowledge base will be used. Useful for environments without internet access."
+      "enableWebSearchDescription": "When disabled, only local RAG knowledge base will be used. Useful for environments without internet access.",
+      "alwaysIncludeRag": "Always prefer local RAG",
+      "alwaysIncludeRagDescription": "When on, researcher will prioritize local knowledge base for every research."
     },
     "mcp": {
       "title": "MCP Servers",

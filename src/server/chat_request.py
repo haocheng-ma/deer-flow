@@ -6,7 +6,7 @@ from typing import List, Optional, Union
 from pydantic import BaseModel, Field
 
 from src.config.report_style import ReportStyle
-from src.rag.retriever import Resource
+from src.rag import Resource
 
 
 class ContentItem(BaseModel):
@@ -64,6 +64,9 @@ class ChatRequest(BaseModel):
     )
     enable_web_search: Optional[bool] = Field(
         True, description="Whether to enable web search, set to False to use only local RAG"
+    )
+    always_include_rag: Optional[bool] = Field(
+        False, description="When True, researcher prioritizes local_search_tool for every research"
     )
     report_style: Optional[ReportStyle] = Field(
         ReportStyle.ACADEMIC, description="The style of the report"

@@ -217,17 +217,7 @@ CRAWLER_ENGINE:
 
 ### Private Wissensbasis
 
-DeerFlow unterstützt private Wissensbasen wie RAGFlow und VikingDB, sodass Sie Ihre privaten Dokumente zur Beantwortung von Fragen verwenden können.
-
-- **[RAGFlow](https://ragflow.io/docs/dev/)**：Open-Source-RAG-Engine
-   ```
-   # Beispiele in .env.example
-   RAG_PROVIDER=ragflow
-   RAGFLOW_API_URL="http://localhost:9388"
-   RAGFLOW_API_KEY="ragflow-xxx"
-   RAGFLOW_RETRIEVAL_SIZE=10
-   RAGFLOW_CROSS_LANGUAGES=English,Chinese,Spanish,French,German,Japanese,Korean
-   ```
+DeerFlow unterstützt private Wissensbasen über selbst verwaltete Vektordatenbanken ([Qdrant](https://qdrant.tech/), [Milvus](https://milvus.io/)). Konfigurationsbeispiele finden Sie in `.env.example`.
 
 ## Funktionen
 
@@ -239,6 +229,10 @@ DeerFlow unterstützt private Wissensbasen wie RAGFlow und VikingDB, sodass Sie 
   - OpenAI-kompatible API-Schnittstelle
   - Mehrstufiges LLM-System für unterschiedliche Aufgabenkomplexitäten
 
+- 📥 **Dokumenten-Ingestion-Pipeline**
+  - Asynchrone Pipeline zur Aufnahme von Dokumenten (PDF, DOCX usw.) mit MinerU-Parser und Chonkie-Chunker.
+  - Konfigurierbare Parallelität, Wiederholungsrichtlinien und temporäre Verzeichnisse. Konfigurationsbeispiel unter `INGESTION_PIPELINE` in `conf.yaml`; siehe [Konfigurationsanleitung](docs/configuration_guide.md) und [API-Dokumentation](docs/API.md).
+
 ### Tools und MCP-Integrationen
 
 - 🔍 **Suche und Abruf**
@@ -249,7 +243,7 @@ DeerFlow unterstützt private Wissensbasen wie RAGFlow und VikingDB, sodass Sie 
 
 - 📃 **RAG-Integration**
 
-  - Unterstützt die Erwähnung von Dateien aus [RAGFlow](https://github.com/infiniflow/ragflow) innerhalb der Eingabebox. [RAGFlow-Server starten](https://ragflow.io/docs/dev/).
+  - Selbst verwaltete Vektordatenbanken: [Qdrant](https://qdrant.tech/), [Milvus](https://milvus.io/)
 
 - 🔗 **MCP Nahtlose Integration**
   - Erweiterte Fähigkeiten für privaten Domänenzugriff, Wissensgraphen, Webbrowsing und mehr
@@ -592,7 +586,7 @@ Wir möchten unsere aufrichtige Wertschätzung den folgenden Projekten für ihre
 - **[LangChain](https://github.com/langchain-ai/langchain)**: Ihr außergewöhnliches Framework unterstützt unsere LLM-Interaktionen und -Ketten und ermöglicht nahtlose Integration und Funktionalität.
 - **[LangGraph](https://github.com/langchain-ai/langgraph)**: Ihr innovativer Ansatz zur Multi-Agenten-Orchestrierung war maßgeblich für die Ermöglichung der ausgeklügelten Workflows von DeerFlow.
 - **[Novel](https://github.com/steven-tey/novel)**: Ihr Notion-artiger WYSIWYG-Editor unterstützt unsere Berichtbearbeitung und KI-unterstützte Umschreibung.
-- **[RAGFlow](https://github.com/infiniflow/ragflow)**: Wir haben durch die Integration mit RAGFlow die Unterstützung für Forschung auf privaten Wissensdatenbanken der Benutzer erreicht.
+- **Selbst verwaltete Vektordatenbank (Qdrant, Milvus)**: Unterstützung für Forschung auf privaten Wissensdatenbanken der Benutzer.
 
 Diese Projekte veranschaulichen die transformative Kraft der Open-Source-Zusammenarbeit, und wir sind stolz darauf, auf ihren Grundlagen aufzubauen.
 

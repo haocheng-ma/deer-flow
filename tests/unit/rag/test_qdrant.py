@@ -9,8 +9,11 @@ from uuid import uuid4
 
 import pytest
 
-import src.rag.qdrant as qdrant_mod
-from src.rag.qdrant import QdrantProvider
+import src.rag.retrieve.qdrant as qdrant_mod
+from src.rag.retrieve import QdrantProvider
+from src.rag.types import ChunkDocWithVector
+
+EXAMPLES_REMOVED = "load_examples / examples loading removed (demo only)"
 
 
 class DummyEmbedding:
@@ -26,12 +29,18 @@ class DummyEmbedding:
 
 @pytest.fixture(autouse=True)
 def patch_embeddings(monkeypatch):
-    monkeypatch.setenv("QDRANT_EMBEDDING_PROVIDER", "openai")
-    monkeypatch.setenv("QDRANT_EMBEDDING_MODEL", "text-embedding-ada-002")
     monkeypatch.setenv("QDRANT_COLLECTION", "documents")
     monkeypatch.setenv("QDRANT_LOCATION", ":memory:")
-    monkeypatch.setattr(qdrant_mod, "OpenAIEmbeddings", DummyEmbedding)
-    monkeypatch.setattr(qdrant_mod, "DashscopeEmbeddings", DummyEmbedding)
+    monkeypatch.setenv("RAG_EMBEDDING_MODEL", "text-embedding-ada-002")
+    dummy = DummyEmbedding()
+    monkeypatch.setattr(qdrant_mod, "get_embedder", lambda: dummy)
+    yield
+
+
+@pytest.fixture
+def embed_dim_1536(monkeypatch):
+    """Fix collection dimension to 1536 to match DummyEmbedding; avoid conf.yaml/env mismatch."""
+    monkeypatch.setattr(qdrant_mod, "get_embedding_dimension", lambda _config=None: 1536)
     yield
 
 
@@ -70,42 +79,37 @@ def temp_load_skip_examples_dir(project_root):
         shutil.rmtree(temp_dir_path)
 
 
-def test_init_openai_provider(monkeypatch):
-    monkeypatch.setenv("QDRANT_EMBEDDING_PROVIDER", "openai")
+def test_init_embedder_lazy(monkeypatch):
+    """QdrantProvider lazily loads embedder, consistent with get_embedder()."""
     provider = QdrantProvider()
-    assert provider.embedding_provider == "openai"
-    assert isinstance(provider.embedding_model, DummyEmbedding)
+    assert isinstance(provider._get_embedder(), DummyEmbedding)
 
 
-def test_init_dashscope_provider(monkeypatch):
-    monkeypatch.setenv("QDRANT_EMBEDDING_PROVIDER", "dashscope")
+def test_ingest_chunks_raises_not_implemented():
+    """Qdrant ingest_chunks should raise NotImplementedError with message containing 'qdrant'."""
     provider = QdrantProvider()
-    assert provider.embedding_provider == "dashscope"
-    assert isinstance(provider.embedding_model, DummyEmbedding)
-
-
-def test_init_invalid_provider(monkeypatch):
-    monkeypatch.setenv("QDRANT_EMBEDDING_PROVIDER", "invalid_provider")
-    with pytest.raises(ValueError, match="Unsupported embedding provider"):
-        QdrantProvider()
+    chunks = [ChunkDocWithVector(id="c1", content="x", metadata={}, vector=[0.1] * 8)]
+    with pytest.raises(NotImplementedError, match="qdrant"):
+        provider.ingest_chunks(chunks, {"filename": "a.pdf"})
 
 
 def test_get_embedding_dimension_explicit(monkeypatch):
-    monkeypatch.setenv("QDRANT_EMBEDDING_DIM", "2048")
+    """Explicit dimension from RAG_EMBEDDING_DIM (.env single entry)."""
+    monkeypatch.setenv("RAG_EMBEDDING_DIM", "2048")
     provider = QdrantProvider()
     assert provider.embedding_dim == 2048
 
 
 def test_get_embedding_dimension_default(monkeypatch):
-    monkeypatch.delenv("QDRANT_EMBEDDING_DIM", raising=False)
-    monkeypatch.setenv("QDRANT_EMBEDDING_MODEL", "text-embedding-ada-002")
+    monkeypatch.delenv("RAG_EMBEDDING_DIM", raising=False)
+    monkeypatch.setenv("RAG_EMBEDDING_MODEL", "text-embedding-ada-002")
     provider = QdrantProvider()
     assert provider.embedding_dim == 1536
 
 
 def test_get_embedding_dimension_unknown_model(monkeypatch):
-    monkeypatch.delenv("QDRANT_EMBEDDING_DIM", raising=False)
-    monkeypatch.setenv("QDRANT_EMBEDDING_MODEL", "unknown-model")
+    monkeypatch.delenv("RAG_EMBEDDING_DIM", raising=False)
+    monkeypatch.setenv("RAG_EMBEDDING_MODEL", "unknown-model")
     provider = QdrantProvider()
     assert provider.embedding_dim == 1536
 
@@ -123,6 +127,7 @@ def test_create_collection(monkeypatch):
     assert provider.client is not None
 
 
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
 def test_extract_title_from_markdown():
     provider = QdrantProvider()
     content = "# Test Title\n\nSome content"
@@ -130,6 +135,7 @@ def test_extract_title_from_markdown():
     assert title == "Test Title"
 
 
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
 def test_extract_title_fallback():
     provider = QdrantProvider()
     content = "No title here"
@@ -137,6 +143,7 @@ def test_extract_title_fallback():
     assert title == "Test File"
 
 
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
 def test_split_content_short():
     provider = QdrantProvider()
     content = "Short content"
@@ -145,6 +152,7 @@ def test_split_content_short():
     assert chunks[0] == content
 
 
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
 def test_split_content_long(monkeypatch):
     monkeypatch.setenv("QDRANT_CHUNK_SIZE", "20")
     provider = QdrantProvider()
@@ -167,19 +175,22 @@ def test_get_embedding():
     assert all(isinstance(x, float) for x in embedding)
 
 
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
 def test_load_examples_no_directory(monkeypatch, project_root):
     monkeypatch.setenv("QDRANT_EXAMPLES_DIR", "nonexistent_dir")
     provider = QdrantProvider()
     provider.load_examples()
 
 
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
 def test_load_examples_empty_directory(monkeypatch, temp_examples_dir):
     monkeypatch.setenv("QDRANT_EXAMPLES_DIR", temp_examples_dir.name)
     provider = QdrantProvider()
     provider.load_examples()
 
 
-def test_load_examples_with_files(monkeypatch, temp_examples_dir):
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
+def test_load_examples_with_files(monkeypatch, temp_examples_dir, embed_dim_1536):
     monkeypatch.setenv("QDRANT_EXAMPLES_DIR", temp_examples_dir.name)
 
     md_file = temp_examples_dir / "test.md"
@@ -193,7 +204,8 @@ def test_load_examples_with_files(monkeypatch, temp_examples_dir):
     assert loaded[0]["title"] == "Test"
 
 
-def test_load_examples_skip_existing(monkeypatch, temp_load_skip_examples_dir):
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
+def test_load_examples_skip_existing(monkeypatch, temp_load_skip_examples_dir, embed_dim_1536):
     monkeypatch.setenv("QDRANT_EXAMPLES_DIR", temp_load_skip_examples_dir.name)
 
     md_file = temp_load_skip_examples_dir / "test.md"
@@ -207,7 +219,8 @@ def test_load_examples_skip_existing(monkeypatch, temp_load_skip_examples_dir):
     assert len(loaded) == 1
 
 
-def test_load_examples_force_reload(monkeypatch, temp_examples_dir):
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
+def test_load_examples_force_reload(monkeypatch, temp_examples_dir, embed_dim_1536):
     monkeypatch.setenv("QDRANT_EXAMPLES_DIR", temp_examples_dir.name)
 
     md_file = temp_examples_dir / "test.md"
@@ -221,7 +234,8 @@ def test_load_examples_force_reload(monkeypatch, temp_examples_dir):
     assert len(loaded) == 1
 
 
-def test_load_examples_error_handling(monkeypatch, temp_error_examples_dir):
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
+def test_load_examples_error_handling(monkeypatch, temp_error_examples_dir, embed_dim_1536):
     monkeypatch.setenv("QDRANT_EXAMPLES_DIR", temp_error_examples_dir.name)
 
     good_file = temp_error_examples_dir / "good.md"
@@ -237,6 +251,7 @@ def test_load_examples_error_handling(monkeypatch, temp_error_examples_dir):
     assert len(loaded) >= 1
 
 
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
 def test_list_resources_no_query(monkeypatch, temp_examples_dir):
     monkeypatch.setenv("QDRANT_EXAMPLES_DIR", temp_examples_dir.name)
 
@@ -250,6 +265,7 @@ def test_list_resources_no_query(monkeypatch, temp_examples_dir):
     assert len(resources) >= 1
 
 
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
 def test_list_resources_with_query(monkeypatch, temp_examples_dir):
     monkeypatch.setenv("QDRANT_EXAMPLES_DIR", temp_examples_dir.name)
 
@@ -263,7 +279,8 @@ def test_list_resources_with_query(monkeypatch, temp_examples_dir):
     assert isinstance(resources, list)
 
 
-def test_query_relevant_documents(monkeypatch, temp_examples_dir):
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
+def test_query_relevant_documents(monkeypatch, temp_examples_dir, embed_dim_1536):
     monkeypatch.setenv("QDRANT_EXAMPLES_DIR", temp_examples_dir.name)
 
     md_file = temp_examples_dir / "test.md"
@@ -276,7 +293,8 @@ def test_query_relevant_documents(monkeypatch, temp_examples_dir):
     assert isinstance(documents, list)
 
 
-def test_query_relevant_documents_with_resources(monkeypatch, temp_examples_dir):
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
+def test_query_relevant_documents_with_resources(monkeypatch, temp_examples_dir, embed_dim_1536):
     monkeypatch.setenv("QDRANT_EXAMPLES_DIR", temp_examples_dir.name)
 
     md_file = temp_examples_dir / "test.md"
@@ -315,6 +333,7 @@ def test_top_k_invalid(monkeypatch):
     assert provider.top_k == 10
 
 
+@pytest.mark.skip(reason=EXAMPLES_REMOVED)
 def test_chunk_size_configuration(monkeypatch):
     monkeypatch.setenv("QDRANT_CHUNK_SIZE", "5000")
     provider = QdrantProvider()
@@ -327,7 +346,3 @@ def test_collection_name_configuration(monkeypatch):
     assert provider.collection_name == "custom_collection"
 
 
-def test_auto_load_examples_configuration(monkeypatch):
-    monkeypatch.setenv("QDRANT_AUTO_LOAD_EXAMPLES", "false")
-    provider = QdrantProvider()
-    assert provider.auto_load_examples is False

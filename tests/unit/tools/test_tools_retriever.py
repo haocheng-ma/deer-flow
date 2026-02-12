@@ -9,7 +9,7 @@ from langchain_core.callbacks import (
     CallbackManagerForToolRun,
 )
 
-from src.rag import Chunk, Document, Resource, Retriever
+from src.rag import Chunk, Resource, Retriever, RetrievedDocument
 from src.tools.retriever import RetrieverInput, RetrieverTool, get_retriever_tool
 
 
@@ -33,7 +33,7 @@ def test_retriever_tool_init():
 def test_retriever_tool_run_with_results():
     mock_retriever = Mock(spec=Retriever)
     chunk = Chunk(content="test content", similarity=0.9)
-    doc = Document(id="doc1", chunks=[chunk])
+    doc = RetrievedDocument(id="doc1", chunks=[chunk])
     mock_retriever.query_relevant_documents.return_value = [doc]
 
     resources = [Resource(uri="test://uri", title="Test")]
@@ -65,7 +65,7 @@ def test_retriever_tool_run_no_results():
 async def test_retriever_tool_arun():
     mock_retriever = Mock(spec=Retriever)
     chunk = Chunk(content="async content", similarity=0.8)
-    doc = Document(id="doc2", chunks=[chunk])
+    doc = RetrievedDocument(id="doc2", chunks=[chunk])
     
     # Mock the async method
     async def mock_async_query(*args, **kwargs):

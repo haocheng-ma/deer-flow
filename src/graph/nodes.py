@@ -117,6 +117,8 @@ def preserve_state_meta_fields(state: State) -> dict:
         "max_clarification_rounds": state.get("max_clarification_rounds", 3),
         "clarification_rounds": state.get("clarification_rounds", 0),
         "resources": state.get("resources", []),
+        "has_local_search": state.get("has_local_search", False),
+        "rag_intent_detected": state.get("rag_intent_detected", False),
     }
 
 
@@ -1075,7 +1077,7 @@ async def _execute_agent_step(
         ]
     }
 
-    # Add citation reminder for researcher agent
+    # Add citation reminder for researcher agent (guard: only inject RAG hints when has_local_search)
     if agent_name == "researcher":
         if state.get("resources"):
             resources_info = "**The user mentioned the following resource files:**\n\n"
@@ -1089,6 +1091,32 @@ async def _execute_agent_step(
                     + "You MUST use the **local_search_tool** to retrieve the information from the resource files.",
                 )
             )
+        elif state.get("has_local_search"):
+            configurable = Configuration.from_runnable_config(config)
+            logger.debug(
+                "[researcher] RAG injection: has_local_search=%s, rag_intent_detected=%s, always_include_rag=%s",
+                state.get("has_local_search", False),
+                state.get("rag_intent_detected", False),
+                configurable.always_include_rag,
+            )
+            if configurable.always_include_rag:
+                agent_input["messages"].append(
+                    HumanMessage(
+                        content="**Prefer local RAG (user setting)**: Use **local_search_tool** as priority for this research.",
+                    )
+                )
+            elif state.get("rag_intent_detected"):
+                agent_input["messages"].append(
+                    HumanMessage(
+                        content="**Local knowledge base intent detected**: The user expressed interest in local/uploaded documents. Use **local_search_tool** to retrieve relevant content.",
+                    )
+                )
+            else:
+                agent_input["messages"].append(
+                    HumanMessage(
+                        content="**Local knowledge base available:** Use **local_search_tool** when the user mentions uploaded documents, local papers, or private knowledge base. Search the full RAG to find relevant content.",
+                    )
+                )
 
         agent_input["messages"].append(
             HumanMessage(
@@ -1391,7 +1419,7 @@ async def researcher_node(
     else:
         logger.info("[researcher_node] Web search is disabled, using only local RAG")
     
-    # Add retriever tool if resources are available (always add, higher priority)
+    # Add retriever tool when RAG is configured (empty resources = search full KB)
     retriever_tool = get_retriever_tool(state.get("resources", []))
     if retriever_tool:
         logger.debug(f"[researcher_node] Adding retriever tool to tools list")
@@ -1399,7 +1427,7 @@ async def researcher_node(
     
     # Warn if no tools are available
     if not tools:
-        logger.warning("[researcher_node] No tools available (web search disabled, no resources). "
+        logger.warning("[researcher_node] No tools available (web search disabled, no RAG). "
                        "Researcher will operate in pure reasoning mode.")
     
     logger.info(f"[researcher_node] Researcher tools count: {len(tools)}")
@@ -1407,8 +1435,10 @@ async def researcher_node(
     logger.info(f"[researcher_node] enforce_researcher_search={configurable.enforce_researcher_search}, "
                 f"enable_web_search={configurable.enable_web_search}")
     
+    # Pass has_local_search for prompt template (show local_search_tool in prompt when available)
+    state_for_agent = {**state, "has_local_search": retriever_tool is not None}
     return await _setup_and_execute_agent_step(
-        state,
+        state_for_agent,
         config,
         "researcher",
         tools,

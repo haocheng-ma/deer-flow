@@ -3,14 +3,14 @@
 
 from pydantic import BaseModel, Field
 
-from src.rag.retriever import Resource
+from src.rag import Resource
 
 
 class RAGConfigResponse(BaseModel):
     """Response model for RAG config."""
 
     provider: str | None = Field(
-        None, description="The provider of the RAG, default is ragflow"
+        None, description="The provider of the RAG (e.g. milvus, qdrant)"
     )
 
 

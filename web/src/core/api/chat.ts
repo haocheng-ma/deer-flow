@@ -52,6 +52,7 @@ export async function* chatStream(
     enable_deep_thinking?: boolean;
     enable_background_investigation: boolean;
     enable_web_search?: boolean;
+    always_include_rag?: boolean;
     report_style?: "academic" | "popular_science" | "news" | "social_media" | "strategic_investment";
     mcp_settings?: {
       servers: Record<

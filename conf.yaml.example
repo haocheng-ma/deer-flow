@@ -69,6 +69,17 @@ BASIC_MODEL:
 # Note: This can be overridden per-request via the API parameter `enable_web_search`.
 # ENABLE_WEB_SEARCH: true
 
+# RAG intent detection (optional)
+# When true (default), detect user intent to use local/uploaded documents and inject RAG hints.
+# Set to false to disable (e.g. rollback or reduce false positives). Can also use env ENABLE_RAG_INTENT_DETECTION.
+# ENABLE_RAG_INTENT_DETECTION: true
+# Optional: extend default trigger phrases for RAG intent (merged with code defaults)
+# RAG_INTENT_PATTERNS:
+#   keywords:
+#     - "uploaded"
+#     - "my documents"
+#     - "knowledge base"
+
 # Search engine configuration
 # Supported engines: tavily, infoquest
 # SEARCH_ENGINE:
@@ -125,3 +136,25 @@ BASIC_MODEL:
 #   # Timeout for navigating to the page (in seconds)
 #   # Set to positive value to enable, -1 to disable
 #   navi_timeout: 15
+
+
+# RAG ingestion pipeline: only keys actually read by code. 
+# For parser/chunker extra fields see DocumentParser, ChonkieChunker default_config/get_config_schema.
+# INGESTION_PIPELINE:
+#   parser:
+#     api_token: $MINERU_API_TOKEN   # From env, required
+#     model_version: pipeline
+#     enable_ocr: false
+#     language: ch
+#     timeout: 300
+#     batch_size: 200                # Max files per parse batch (align with MinerU)
+#   chunker:
+#     type: token                    # token | sentence | recursive
+#     chunk_size: 2048
+#     chunk_overlap: 0
+#     tokenizer: character
+#   pipeline:
+#     max_chunks_per_file: 2000      # Max chunks per file
+#     temp_dir: /tmp/deer-flow       # Temp dir for pipeline (upload staging) and parser (MinerU ZIP extract); default /tmp/deer-flow if unset
+#   store:
+#     insert_batch_size: 200         # Store insert batch size (Milvus default 200)

@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     enableDeepThinking: false,
     enableBackgroundInvestigation: false,
     enableWebSearch: true,
+    alwaysIncludeRag: false,
     maxPlanIterations: 1,
     maxStepNum: 3,
     maxSearchResults: 3,
@@ -33,6 +34,7 @@ export type SettingsState = {
     enableDeepThinking: boolean;
     enableBackgroundInvestigation: boolean;
     enableWebSearch: boolean;
+    alwaysIncludeRag: boolean;
     maxPlanIterations: number;
     maxStepNum: number;
     maxSearchResults: number;

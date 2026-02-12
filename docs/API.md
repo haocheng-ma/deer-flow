@@ -324,7 +324,7 @@ Returns the current RAG (Retrieval-Augmented Generation) provider configuration.
 **Response:**
 ```json
 {
-  "provider": "ragflow"
+  "provider": "qdrant"
 }
 ```
 
@@ -335,26 +335,70 @@ Returns the current RAG (Retrieval-Augmented Generation) provider configuration.
 
 #### `GET /api/rag/resources`
 
-Retrieves available resources from the RAG system based on optional query.
+Retrieves available resources from the RAG system. Supports optional query to bias ordering (Milvus/Qdrant may use it for semantic listing). Resources are listed from the configured vector store (e.g. uploaded documents).
 
 **Query Parameters:**
-- `query` (optional, string): Search query for resources
+- `query` (optional, string): Optional search query for resource listing
 
 **Response:**
 ```json
 {
   "resources": [
     {
-      "id": "resource_1",
-      "name": "Document",
-      "type": "pdf"
+      "uri": "milvus://documents/report.pdf",
+      "title": "report.pdf",
+      "description": "Uploaded file"
     }
   ]
 }
 ```
 
 **Error Responses:**
-- None (returns empty resources array if retriever not configured)
+- None (returns empty `resources` array if RAG provider not configured)
+
+---
+
+#### `POST /api/rag/upload`
+
+Upload one or more documents for RAG ingestion. Files are processed by the ingestion pipeline (Parse → Chunk → Embed → Store). Only **Milvus** supports ingest; **Qdrant** returns 501.
+
+**Prerequisites:**
+- RAG provider configured (e.g. `RAG_PROVIDER=milvus`) and reachable
+- Ingestion pipeline configured: in `conf.yaml` under `INGESTION_PIPELINE.parser`, `api_token` (e.g. MinerU API token) must be set
+- Embedding configured via `.env` (`RAG_EMBEDDING_*`)
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body: either
+  - `file`: single file, or
+  - `files`: multiple files (takes precedence if both present)
+- Allowed extensions: `.doc`, `.docx`, `.pdf`, `.ppt`, `.pptx`
+- Max file size: 200 MB per file
+- Max files per request: 200
+
+**Response:** `IndexResult`
+
+```json
+{
+  "trace_id": "trace_a1b2c3d4e5f6",
+  "successes": [
+    { "file_id": "report.pdf", "resource": { "uri": "milvus://documents/report.pdf", "title": "report.pdf", "description": "Uploaded file" } }
+  ],
+  "failed": [
+    { "file_id": "large.pdf", "stage": "parse", "reason": "timeout" },
+    { "file_id": "bad.docx", "stage": "chunk", "reason": "chunk count exceeds limit (max=2000)" }
+  ]
+}
+```
+
+- `successes`: list of `{ file_id, resource }`; `resource` has `uri`, `title`, `description`
+- `failed`: list of `{ file_id, stage, reason }`; `stage` is one of `parse`, `chunk`, `embed`, `store`
+
+**Error Responses:**
+- `400`: No file provided; filename required; invalid file type; empty file; too many files (max 200); or RAG pipeline not configured (e.g. parse `api_token` missing)
+- `413`: File too large (max 200 MB per file)
+- `501`: Ingest not supported for current provider (e.g. Qdrant)
+- `500`: RAG provider not configured, or internal error during ingestion
 
 ---
 
@@ -368,7 +412,7 @@ Returns the complete server configuration including RAG settings and available m
 ```json
 {
   "rag": {
-    "provider": "ragflow"
+    "provider": "qdrant"
   },
   "models": {
     "llm": ["gpt-4", "gpt-3.5-turbo"],
@@ -419,7 +463,9 @@ All endpoints follow standard HTTP status codes:
 | 200 | Success |
 | 400 | Bad Request - Invalid parameters |
 | 403 | Forbidden - Feature disabled or unauthorized |
+| 413 | Payload Too Large - e.g. file size exceeded |
 | 500 | Internal Server Error |
+| 501 | Not Implemented - e.g. RAG ingest not supported for Qdrant |
 
 Error response format:
 ```json
@@ -485,7 +531,7 @@ LANGGRAPH_CHECKPOINT_SAVER=false
 LANGGRAPH_CHECKPOINT_DB_URL=postgresql://user:pass@localhost/db
 
 # RAG
-RAG_PROVIDER=ragflow
+RAG_PROVIDER=qdrant
 ```
 
 ---

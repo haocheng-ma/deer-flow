@@ -303,6 +303,29 @@ Or via API request parameter:
 - **Researcher node**: Will use only RAG retriever tools if configured
 - **Pure reasoning mode**: If no RAG resources are available, the researcher will rely solely on LLM reasoning
 
+### RAG intent detection and user preference
+
+DeerFlow can detect when the user expresses intent to use local/uploaded documents (RAG) and can respect a “prefer local RAG by default” setting.
+
+**Intent detection** (when the user says things like “use my documents” or “结合我上传的论文”):
+
+- **Switch**: In `conf.yaml` set `ENABLE_RAG_INTENT_DETECTION: false` to turn off intent detection (e.g. to reduce false positives or roll back). Default is `true`. You can also set the `ENABLE_RAG_INTENT_DETECTION` environment variable.
+- **Custom phrases**: Optionally add or extend trigger phrases in `conf.yaml`:
+
+```yaml
+# Optional: extend or override default RAG intent trigger phrases
+RAG_INTENT_PATTERNS:
+  keywords:
+    - "uploaded"
+    - "my documents"
+    - "knowledge base"
+# If omitted, code defaults are used. Phrases are merged with defaults (not replaced).
+```
+
+**User preference “always prefer local RAG”**:
+
+- This is controlled per request via the API parameter `always_include_rag` (and in the web UI under settings). When `true`, the researcher prioritizes `local_search_tool` for every research even if the user did not mention RAG. There is no global default in `conf.yaml` for this; it is a per-session/user setting.
+
 ---
 
 ## Recursion Fallback Configuration
@@ -332,59 +355,56 @@ AGENT_RECURSION_LIMIT=50
 
 ## RAG (Retrieval-Augmented Generation) Configuration
 
-DeerFlow supports multiple RAG providers for document retrieval. Configure the RAG provider by setting environment variables.
+DeerFlow supports self-managed vector databases for RAG. Configure the RAG provider by setting environment variables.
 
 ### Supported RAG Providers
 
-- **RAGFlow**: Document retrieval using RAGFlow API
-- **VikingDB Knowledge Base**: ByteDance's VikingDB knowledge base service
 - **Milvus**: Open-source vector database for similarity search
 - **Qdrant**: Open-source vector search engine with cloud and self-hosted options
-- **MOI**: Hybrid database for enterprise users
-- **Dify**: AI application platform with RAG capabilities
+
+### Embedding configuration (ingest and retrieval)
+
+Embedding is shared by **ingest** and **retrieval** and is independent of the RAG provider (Milvus/Qdrant). **Configuration is via .env only**; do not put it under `INGESTION_PIPELINE` or in `conf.yaml`.
+
+- **Environment variables** (.env): use **`RAG_EMBEDDING_*`**
+  - `RAG_EMBEDDING_PROVIDER`: `openai` or `dashscope`
+  - `RAG_EMBEDDING_MODEL`, `RAG_EMBEDDING_API_KEY`, `RAG_EMBEDDING_BASE_URL`, `RAG_EMBEDDING_DIM` (optional)
+- Dimension lookup: see `EMBEDDING_MODEL_DIMENSIONS` in `src/rag/common/config.py`.
 
 ### Qdrant Configuration
 
-To use Qdrant as your RAG provider, set the following environment variables:
+To use Qdrant as your RAG provider, set the following (embedding uses the `RAG_EMBEDDING_*` variables above):
 
 ```bash
-# RAG_PROVIDER: qdrant (using Qdrant Cloud or self-hosted)
 RAG_PROVIDER=qdrant
 QDRANT_LOCATION=https://xyz-example.eu-central.aws.cloud.qdrant.io:6333
 QDRANT_API_KEY=<your_qdrant_api_key>
 QDRANT_COLLECTION=documents
-QDRANT_EMBEDDING_PROVIDER=openai  # support openai, dashscope
-QDRANT_EMBEDDING_BASE_URL=
-QDRANT_EMBEDDING_MODEL=text-embedding-ada-002
-QDRANT_EMBEDDING_API_KEY=<your_embedding_api_key>
-QDRANT_AUTO_LOAD_EXAMPLES=true  # automatically load example markdown files
 ```
 
 ### Milvus Configuration
 
-To use Milvus as your RAG provider, set the following environment variables:
+To use Milvus as your RAG provider (embedding uses the `RAG_EMBEDDING_*` variables above):
 
 ```bash
-# RAG_PROVIDER: milvus  (using free milvus instance on zilliz cloud: https://docs.zilliz.com/docs/quick-start )
+# zilliz cloud
 RAG_PROVIDER=milvus
 MILVUS_URI=<endpoint_of_self_hosted_milvus_or_zilliz_cloud>
 MILVUS_USER=<username_of_self_hosted_milvus_or_zilliz_cloud>
 MILVUS_PASSWORD=<password_of_self_hosted_milvus_or_zilliz_cloud>
 MILVUS_COLLECTION=documents
-MILVUS_EMBEDDING_PROVIDER=openai
-MILVUS_EMBEDDING_BASE_URL=
-MILVUS_EMBEDDING_MODEL=
-MILVUS_EMBEDDING_API_KEY=
 
-# RAG_PROVIDER: milvus  (using milvus lite on Mac or Linux)
+# milvus lite
 RAG_PROVIDER=milvus
 MILVUS_URI=./milvus_demo.db
 MILVUS_COLLECTION=documents
-MILVUS_EMBEDDING_PROVIDER=openai
-MILVUS_EMBEDDING_BASE_URL=
-MILVUS_EMBEDDING_MODEL=
-MILVUS_EMBEDDING_API_KEY=
 ```
+
+### RAG document upload (ingest)
+
+- **Document ingestion** (upload via API or pipeline) is supported only when **Milvus** is the RAG provider. With **Qdrant**, only retrieval (list resources, query) is supported; upload returns 501.
+- Upload requires the **ingestion pipeline** to be configured: in `conf.yaml`, under `INGESTION_PIPELINE.parser`, set `api_token` (e.g. MinerU API token). See `conf.yaml.example` for the full `INGESTION_PIPELINE` section.
+- RAG **example documents** are no longer auto-loaded at server startup. To populate the knowledge base, use the upload API or run the pipeline yourself.
 
 ---
 

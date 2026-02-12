@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessageChunk, ToolMessage
 from langgraph.types import Command
 
 from src.config.report_style import ReportStyle
+from src.rag import IndexResult, IndexSuccessEntry, Resource
 from src.server.app import (
     _astream_workflow_generator,
     _create_interrupt_event,
@@ -522,13 +523,15 @@ class TestRAGEndpoints:
     @patch("src.server.app.build_retriever")
     def test_rag_resources_with_retriever(self, mock_build_retriever, client):
         mock_retriever = MagicMock()
-        mock_retriever.list_resources.return_value = [
-            {
-                "uri": "test_uri",
-                "title": "Test Resource",
-                "description": "Test Description",
-            }
-        ]
+        mock_retriever.list_resources_async = AsyncMock(
+            return_value=[
+                {
+                    "uri": "test_uri",
+                    "title": "Test Resource",
+                    "description": "Test Description",
+                }
+            ]
+        )
         mock_build_retriever.return_value = mock_retriever
 
         response = client.get("/api/rag/resources?query=test")
@@ -545,65 +548,84 @@ class TestRAGEndpoints:
         assert response.status_code == 200
         assert response.json()["resources"] == []
 
+    @patch("src.server.app.RAGPipeline")
+    @patch("src.server.app.load_ingestion_pipeline_config")
     @patch("src.server.app.build_retriever")
-    def test_upload_rag_resource_success(self, mock_build_retriever, client):
+    def test_upload_rag_resource_success(
+        self, mock_build_retriever, mock_load_config, mock_rag_pipeline_cls, client
+    ):
+        mock_load_config.return_value = {"parser": {"api_token": "test-token"}}
         mock_retriever = MagicMock()
-        mock_retriever.ingest_file.return_value = {
-            "uri": "milvus://test/file.md",
-            "title": "Test File",
-            "description": "Uploaded file",
-        }
+        mock_retriever._ensure_connected_async = AsyncMock(return_value=None)
         mock_build_retriever.return_value = mock_retriever
+        mock_pipeline = MagicMock()
+        mock_pipeline.run_index = AsyncMock(
+            return_value=IndexResult(
+                trace_id="trace_1",
+                successes=[IndexSuccessEntry(file_id="test.pdf", resource=Resource(uri="milvus://test/file.pdf", title="Test File", description="Uploaded file"))],
+                failed=[],
+            )
+        )
+        mock_rag_pipeline_cls.return_value = mock_pipeline
 
-        files = {"file": ("test.md", b"# Test content", "text/markdown")}
+        files = {"file": ("test.pdf", b"# Test content", "application/pdf")}
         response = client.post("/api/rag/upload", files=files)
 
         assert response.status_code == 200
-        assert response.json()["title"] == "Test File"
-        assert response.json()["uri"] == "milvus://test/file.md"
-        mock_retriever.ingest_file.assert_called_once()
+        body = response.json()
+        assert "trace_id" in body
+        assert body["successes"] == [{"file_id": "test.pdf", "resource": {"uri": "milvus://test/file.pdf", "title": "Test File", "description": "Uploaded file"}}]
+        assert body["failed"] == []
+        mock_pipeline.run_index.assert_called_once()
 
+    @patch("src.server.app.load_ingestion_pipeline_config")
+    def test_upload_rag_resource_parse_not_configured(self, mock_load_config, client):
+        mock_load_config.return_value = {"parser": {}}
+
+        files = {"file": ("test.pdf", b"# Test content", "application/pdf")}
+        response = client.post("/api/rag/upload", files=files)
+
+        assert response.status_code == 400
+        assert "parse api_token missing" in response.json()["detail"]
+
+    @patch("src.server.app.SELECTED_RAG_PROVIDER", "qdrant")
+    @patch("src.server.app.load_ingestion_pipeline_config")
+    def test_upload_rag_resource_qdrant_501(self, mock_load_config, client):
+        mock_load_config.return_value = {"parser": {"api_token": "x"}}
+
+        files = {"file": ("test.pdf", b"# Test content", "application/pdf")}
+        response = client.post("/api/rag/upload", files=files)
+
+        assert response.status_code == 501
+        assert "qdrant" in response.json()["detail"]
+
+    @patch("src.server.app.load_ingestion_pipeline_config")
     @patch("src.server.app.build_retriever")
-    def test_upload_rag_resource_no_retriever(self, mock_build_retriever, client):
+    def test_upload_rag_resource_no_retriever(
+        self, mock_build_retriever, mock_load_config, client
+    ):
+        mock_load_config.return_value = {"parser": {"api_token": "x"}}
         mock_build_retriever.return_value = None
 
-        files = {"file": ("test.md", b"# Test content", "text/markdown")}
+        files = {"file": ("test.pdf", b"# Test content", "application/pdf")}
         response = client.post("/api/rag/upload", files=files)
 
         assert response.status_code == 500
         assert "RAG provider not configured" in response.json()["detail"]
 
+    @patch("src.server.app.RAGPipeline")
+    @patch("src.server.app.load_ingestion_pipeline_config")
     @patch("src.server.app.build_retriever")
-    def test_upload_rag_resource_not_implemented(self, mock_build_retriever, client):
-        mock_retriever = MagicMock()
-        mock_retriever.ingest_file.side_effect = NotImplementedError
-        mock_build_retriever.return_value = mock_retriever
+    def test_upload_rag_resource_run_index_exception(
+        self, mock_build_retriever, mock_load_config, mock_rag_pipeline_cls, client
+    ):
+        mock_load_config.return_value = {"parser": {"api_token": "x"}}
+        mock_build_retriever.return_value = MagicMock()
+        mock_pipeline = MagicMock()
+        mock_pipeline.run_index = AsyncMock(side_effect=RuntimeError("Failed to insert"))
+        mock_rag_pipeline_cls.return_value = mock_pipeline
 
-        files = {"file": ("test.md", b"# Test content", "text/markdown")}
-        response = client.post("/api/rag/upload", files=files)
-
-        assert response.status_code == 501
-        assert "Upload not supported" in response.json()["detail"]
-
-    @patch("src.server.app.build_retriever")
-    def test_upload_rag_resource_value_error(self, mock_build_retriever, client):
-        mock_retriever = MagicMock()
-        mock_retriever.ingest_file.side_effect = ValueError("File is not valid UTF-8")
-        mock_build_retriever.return_value = mock_retriever
-
-        files = {"file": ("test.txt", b"\x80\x81\x82", "text/plain")}
-        response = client.post("/api/rag/upload", files=files)
-
-        assert response.status_code == 400
-        assert "Invalid RAG resource" in response.json()["detail"]
-
-    @patch("src.server.app.build_retriever")
-    def test_upload_rag_resource_runtime_error(self, mock_build_retriever, client):
-        mock_retriever = MagicMock()
-        mock_retriever.ingest_file.side_effect = RuntimeError("Failed to insert into Milvus")
-        mock_build_retriever.return_value = mock_retriever
-
-        files = {"file": ("test.md", b"# Test content", "text/markdown")}
+        files = {"file": ("test.pdf", b"# Test content", "application/pdf")}
         response = client.post("/api/rag/upload", files=files)
 
         assert response.status_code == 500
@@ -617,7 +639,7 @@ class TestRAGEndpoints:
         assert "Invalid file type" in response.json()["detail"]
 
     def test_upload_rag_resource_empty_file(self, client):
-        files = {"file": ("test.md", b"", "text/markdown")}
+        files = {"file": ("test.pdf", b"", "application/pdf")}
         response = client.post("/api/rag/upload", files=files)
 
         assert response.status_code == 400
@@ -625,30 +647,153 @@ class TestRAGEndpoints:
 
     @patch("src.server.app.MAX_UPLOAD_SIZE_BYTES", 10)
     def test_upload_rag_resource_file_too_large(self, client):
-        files = {"file": ("test.md", b"x" * 100, "text/markdown")}
+        files = {"file": ("test.pdf", b"x" * 100, "application/pdf")}
         response = client.post("/api/rag/upload", files=files)
 
         assert response.status_code == 413
         assert "File too large" in response.json()["detail"]
 
+    @patch("src.server.app.RAGPipeline")
+    @patch("src.server.app.load_ingestion_pipeline_config")
     @patch("src.server.app.build_retriever")
-    def test_upload_rag_resource_path_traversal_sanitized(self, mock_build_retriever, client):
+    def test_upload_rag_resource_path_traversal_sanitized(
+        self, mock_build_retriever, mock_load_config, mock_rag_pipeline_cls, client
+    ):
+        mock_load_config.return_value = {"parser": {"api_token": "x"}}
         mock_retriever = MagicMock()
-        mock_retriever.ingest_file.return_value = {
-            "uri": "milvus://test/file.md",
-            "title": "Test File",
-            "description": "Uploaded file",
-        }
+        mock_retriever._ensure_connected_async = AsyncMock(return_value=None)
         mock_build_retriever.return_value = mock_retriever
+        mock_pipeline = MagicMock()
+        mock_pipeline.run_index = AsyncMock(
+            return_value=IndexResult(trace_id="t", successes=[IndexSuccessEntry(file_id="passwd.pdf", resource=Resource(uri="milvus://test/passwd.pdf", title="passwd", description=""))], failed=[])
+        )
+        mock_rag_pipeline_cls.return_value = mock_pipeline
 
-        files = {"file": ("../../../etc/passwd.md", b"# Test", "text/markdown")}
+        files = {"file": ("../../../etc/passwd.pdf", b"# Test", "application/pdf")}
         response = client.post("/api/rag/upload", files=files)
 
         assert response.status_code == 200
-        # Verify the filename was sanitized (only basename used)
-        mock_retriever.ingest_file.assert_called_once()
-        call_args = mock_retriever.ingest_file.call_args
-        assert call_args[0][1] == "passwd.md"
+        call_args = mock_pipeline.run_index.call_args
+        files_arg = call_args[0][0]
+        assert len(files_arg) == 1
+        assert files_arg[0][1] == "passwd.pdf"
+
+    @patch("src.server.app.RAGPipeline")
+    @patch("src.server.app.build_retriever")
+    @patch("src.server.app.load_ingestion_pipeline_config")
+    def test_upload_rag_multifile_success(
+        self, mock_load_config, mock_build_retriever, mock_rag_pipeline_cls, client
+    ):
+        """POST files= with two files -> 200; run_index called with 2 items; IndexResult has 2 successes."""
+        mock_load_config.return_value = {"parser": {"api_token": "x"}, "chunker": {}, "pipeline": {"temp_dir": "/tmp/rag"}}
+        mock_retriever = MagicMock()
+        mock_retriever._ensure_connected_async = AsyncMock(return_value=None)
+        mock_build_retriever.return_value = mock_retriever
+        run_index_result = IndexResult(
+            trace_id="trace_multi",
+            successes=[
+                IndexSuccessEntry(file_id="a.pdf", resource=Resource(uri="milvus://documents/a.pdf", title="a.pdf", description="Uploaded file")),
+                IndexSuccessEntry(file_id="b.pdf", resource=Resource(uri="milvus://documents/b.pdf", title="b.pdf", description="Uploaded file")),
+            ],
+            failed=[],
+        )
+        mock_pipeline = MagicMock()
+        mock_pipeline.run_index = AsyncMock(return_value=run_index_result)
+        mock_rag_pipeline_cls.return_value = mock_pipeline
+
+        files = [
+            ("files", ("a.pdf", b"# A\n", "application/pdf")),
+            ("files", ("b.pdf", b"# B\n", "application/pdf")),
+        ]
+        response = client.post("/api/rag/upload", files=files)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["trace_id"] == "trace_multi"
+        assert len(body["successes"]) == 2
+        assert body["failed"] == []
+        file_ids = [body["successes"][i]["file_id"] for i in range(2)]
+        assert set(file_ids) == {"a.pdf", "b.pdf"}
+        mock_pipeline.run_index.assert_called_once()
+        call_args = mock_pipeline.run_index.call_args[0][0]
+        assert len(call_args) == 2
+        assert call_args[0][1] == "a.pdf"
+        assert call_args[1][1] == "b.pdf"
+
+    @patch("src.server.app.RAGPipeline")
+    @patch("src.server.app.build_retriever")
+    @patch("src.server.app.load_ingestion_pipeline_config")
+    def test_upload_rag_directory_basename(
+        self, mock_load_config, mock_build_retriever, mock_rag_pipeline_cls, client
+    ):
+        """When filename is subdir/report.pdf, file_id is basename report.pdf."""
+        mock_load_config.return_value = {"parser": {"api_token": "x"}, "chunker": {}, "pipeline": {"temp_dir": "/tmp/rag"}}
+        mock_retriever = MagicMock()
+        mock_retriever._ensure_connected_async = AsyncMock(return_value=None)
+        mock_build_retriever.return_value = mock_retriever
+        run_index_result = IndexResult(
+            trace_id="trace_dir",
+            successes=[IndexSuccessEntry(file_id="report.pdf", resource=Resource(uri="milvus://documents/report.pdf", title="report.pdf", description="Uploaded file"))],
+            failed=[],
+        )
+        mock_pipeline = MagicMock()
+        mock_pipeline.run_index = AsyncMock(return_value=run_index_result)
+        mock_rag_pipeline_cls.return_value = mock_pipeline
+
+        files = [("files", ("subdir/report.pdf", b"# Report", "application/pdf"))]
+        response = client.post("/api/rag/upload", files=files)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["successes"][0]["file_id"] == "report.pdf"
+        call_args = mock_pipeline.run_index.call_args[0][0]
+        assert call_args[0][1] == "report.pdf"
+
+    @patch("src.server.app.RAGPipeline")
+    @patch("src.server.app.build_retriever")
+    @patch("src.server.app.load_ingestion_pipeline_config")
+    def test_upload_rag_same_basename_dedup(
+        self, mock_load_config, mock_build_retriever, mock_rag_pipeline_cls, client
+    ):
+        """a/1.pdf and b/1.pdf -> file_id 1.pdf and 1_2.pdf (or stem_2)."""
+        mock_load_config.return_value = {"parser": {"api_token": "x"}, "chunker": {}, "pipeline": {"temp_dir": "/tmp/rag"}}
+        mock_retriever = MagicMock()
+        mock_retriever._ensure_connected_async = AsyncMock(return_value=None)
+        mock_build_retriever.return_value = mock_retriever
+        run_index_result = IndexResult(
+            trace_id="trace_dedup",
+            successes=[
+                IndexSuccessEntry(file_id="1.pdf", resource=Resource(uri="", title="", description="")),
+                IndexSuccessEntry(file_id="1_2.pdf", resource=Resource(uri="", title="", description="")),
+            ],
+            failed=[],
+        )
+        mock_pipeline = MagicMock()
+        mock_pipeline.run_index = AsyncMock(return_value=run_index_result)
+        mock_rag_pipeline_cls.return_value = mock_pipeline
+
+        files = [
+            ("files", ("a/1.pdf", b"pdf content 1", "application/pdf")),
+            ("files", ("b/1.pdf", b"pdf content 2", "application/pdf")),
+        ]
+        response = client.post("/api/rag/upload", files=files)
+
+        assert response.status_code == 200
+        call_args = mock_pipeline.run_index.call_args[0][0]
+        assert len(call_args) == 2
+        file_ids = [call_args[i][1] for i in range(2)]
+        assert file_ids[0] == "1.pdf"
+        assert file_ids[1] != "1.pdf"
+        assert "1" in file_ids[1]
+
+    @patch("src.server.app.load_ingestion_pipeline_config")
+    def test_upload_rag_too_many_files_400(self, mock_load_config, client):
+        """When over MAX_FILES_PER_REQUEST return 400; detail contains max=200."""
+        mock_load_config.return_value = {"parser": {"api_token": "x"}, "chunker": {}, "pipeline": {"temp_dir": "/tmp/rag"}}
+        files = [("files", (f"f{i}.pdf", b"x", "application/pdf")) for i in range(201)]
+        response = client.post("/api/rag/upload", files=files)
+        assert response.status_code == 400
+        assert "max=200" in response.json()["detail"]
 
 
 class TestChatStreamEndpoint:

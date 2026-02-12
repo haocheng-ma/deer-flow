@@ -1,10 +1,13 @@
 # Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
+import logging
 import os
 from typing import Any, Dict
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 def get_bool_env(name: str, default: bool = False) -> bool:
@@ -26,7 +29,9 @@ def get_int_env(name: str, default: int = 0) -> int:
     try:
         return int(val.strip())
     except ValueError:
-        print(f"Invalid integer value for {name}: {val}. Using default {default}.")
+        logger.warning(
+            "Invalid integer value for %s: %r, using default %s.", name, val, default
+        )
         return default
 
 
@@ -59,20 +64,26 @@ _config_cache: Dict[str, Dict[str, Any]] = {}
 
 
 def load_yaml_config(file_path: str) -> Dict[str, Any]:
-    """Load and process YAML configuration file."""
-    # 如果文件不存在，返回{}
+    """Load and process YAML configuration file (UTF-8).
+
+    Returns empty dict if file is missing, empty, or malformed (after logging).
+    """
     if not os.path.exists(file_path):
         return {}
 
-    # 检查缓存中是否已存在配置
     if file_path in _config_cache:
         return _config_cache[file_path]
 
-    # 如果缓存中不存在，则加载并处理配置
-    with open(file_path, "r") as f:
-        config = yaml.safe_load(f)
-    processed_config = process_dict(config)
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        logger.warning("YAML parse error in %s: %s", file_path, e)
+        return {}
+    except OSError as e:
+        logger.warning("Failed to read config file %s: %s", file_path, e)
+        return {}
 
-    # 将处理后的配置存入缓存
+    processed_config = process_dict(config) if config is not None else {}
     _config_cache[file_path] = processed_config
     return processed_config

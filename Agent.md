@@ -182,5 +182,5 @@ cd web && pnpm typecheck
 - **Search**: Tavily, Brave Search, DuckDuckGo
 - **Crawling**: Jina for web content extraction
 - **TTS**: Volcengine TTS API
-- **RAG**: RAGFlow and VikingDB support
+- **RAG**: Self-managed vector DB (Qdrant, Milvus)
 - **MCP**: Model Context Protocol integration

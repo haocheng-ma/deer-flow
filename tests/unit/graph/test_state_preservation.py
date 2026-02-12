@@ -36,6 +36,8 @@ class TestPreserveStateMetaFields:
         assert "max_clarification_rounds" in preserved
         assert "clarification_rounds" in preserved
         assert "resources" in preserved
+        assert "has_local_search" in preserved
+        assert "rag_intent_detected" in preserved
 
         # Verify default values
         assert preserved["locale"] == "en-US"
@@ -46,6 +48,8 @@ class TestPreserveStateMetaFields:
         assert preserved["max_clarification_rounds"] == 3
         assert preserved["clarification_rounds"] == 0
         assert preserved["resources"] == []
+        assert preserved["has_local_search"] is False
+        assert preserved["rag_intent_detected"] is False
 
     def test_preserve_locale_from_state(self):
         """Test that locale is correctly preserved when set in state."""
@@ -114,6 +118,22 @@ class TestPreserveStateMetaFields:
 
         assert preserved["resources"] == resources
 
+    def test_preserve_rag_intent_and_has_local_search(self):
+        """Test that has_local_search and rag_intent_detected are preserved (RAG intent/checkpoint)."""
+        state = State(
+            messages=[],
+            has_local_search=True,
+            rag_intent_detected=True,
+        )
+        preserved = preserve_state_meta_fields(state)
+        assert preserved["has_local_search"] is True
+        assert preserved["rag_intent_detected"] is True
+
+        state_false = State(messages=[], has_local_search=False, rag_intent_detected=False)
+        preserved_false = preserve_state_meta_fields(state_false)
+        assert preserved_false["has_local_search"] is False
+        assert preserved_false["rag_intent_detected"] is False
+
     def test_preserve_all_fields_together(self):
         """Test that all meta fields are preserved together correctly."""
         state = State(
@@ -180,12 +200,12 @@ class TestPreserveStateMetaFields:
         assert preserved["resources"] == []
 
     def test_preserve_count_of_fields(self):
-        """Test that exactly 8 fields are preserved."""
+        """Test that exactly 10 meta fields are preserved."""
         state = State(messages=[])
         preserved = preserve_state_meta_fields(state)
 
-        # Should have exactly 8 meta fields
-        assert len(preserved) == 8
+        # Should have exactly 10 meta fields (including has_local_search, rag_intent_detected)
+        assert len(preserved) == 10
 
     def test_preserve_field_names(self):
         """Test that all expected field names are present."""
@@ -201,6 +221,8 @@ class TestPreserveStateMetaFields:
             "max_clarification_rounds",
             "clarification_rounds",
             "resources",
+            "has_local_search",
+            "rag_intent_detected",
         }
 
         assert set(preserved.keys()) == expected_fields

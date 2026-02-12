@@ -210,6 +210,10 @@ CRAWLER_ENGINE:
   engine: infoquest
 ```
 
+### プライベートナレッジベース
+
+DeerFlow は自管ベクトルデータベース（[Qdrant](https://qdrant.tech/)、[Milvus](https://milvus.io/)）によるプライベートナレッジベースをサポートします。埋め込みは ingest と retrieval で共通です。`.env` で `RAG_EMBEDDING_*` を設定してください（[設定ガイド](docs/configuration_guide.md)参照）。
+
 ## 特徴
 
 ### コア機能
@@ -220,12 +224,20 @@ CRAWLER_ENGINE:
   - OpenAI互換のAPIインターフェース
   - 異なるタスクの複雑さに対応するマルチティアLLMシステム
 
+- 📥 **ドキュメントインジェストパイプライン**
+  - MinerU パーサーと Chonkie チャンカーによるドキュメント（PDF、DOCX 等）の非同期取り込みパイプライン。設定例は `conf.yaml` の `INGESTION_PIPELINE`。詳細は[設定ガイド](docs/configuration_guide.md)と[API ドキュメント](docs/API.md)を参照。
+
 ### ツールと MCP 統合
 
 - 🔍 **検索と取得**
   - Tavily、InfoQuest、Brave Searchなどを通じたWeb検索
   - JinaとInfoQuestを使用したクローリング
   - 高度なコンテンツ抽出
+  - プライベートナレッジベースの検索に対応
+
+- 📃 **RAG 統合**
+  - 自管ベクトルDB: [Qdrant](https://qdrant.tech/)、[Milvus](https://milvus.io/)
+  - 入力欄から RAG リソースを指定可能
 
 - 🔗 **MCPシームレス統合**
   - プライベートドメインアクセス、ナレッジグラフ、Webブラウジングなどの機能を拡張

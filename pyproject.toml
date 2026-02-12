@@ -50,6 +50,9 @@ dependencies = [
     "psycopg[binary]>=3.2.9",
     "qdrant-client>=1.15.1",
     "langchain-qdrant>=0.2.0",
+    # Chonkie for advanced text chunking
+    "chonkie>=1.5.4",
+    "pydantic>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -59,12 +62,12 @@ dev = [
 ]
 test = [
     "pytest>=7.4.0",
-    "pytest-cov>=4.1.0",
-    "pytest-asyncio>=1.0.0",
     "pytest-cov>=6.0.0",
+    "pytest-asyncio>=1.0.0",
     "asyncpg-stubs>=0.30.2",
     "mongomock>=4.3.0",
     "pytest-postgresql>=7.0.2",
+    "responses>=0.25.0",
 ]
 
 [tool.uv]
@@ -74,6 +77,8 @@ required-version = ">=0.6.15"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-v --cov=src --cov-report=term-missing"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::UserWarning",

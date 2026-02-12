@@ -126,6 +126,7 @@ export async function sendMessage(
       enable_background_investigation:
         settings.enableBackgroundInvestigation ?? true,
       enable_web_search: settings.enableWebSearch ?? true,
+      always_include_rag: settings.alwaysIncludeRag ?? false,
       max_plan_iterations: settings.maxPlanIterations,
       max_step_num: settings.maxStepNum,
       max_search_results: settings.maxSearchResults,
@@ -164,10 +165,22 @@ export async function sendMessage(
         break;
       }
       // Handle citations event: store citations for the current research
+      
+      // Handle citations event: store citations and mark report message as finished.
+      // Reporter uses invoke() so the last message chunk may not include finish_reason;
+      // without this, the report message stays isStreaming=true and the UI appears stuck.
       if (type === "citations") {
         const ongoingResearchId = useStore.getState().ongoingResearchId;
         if (ongoingResearchId && data.citations) {
           useStore.getState().setCitations(ongoingResearchId, data.citations);
+          const reportMessageId = useStore.getState().researchReportIds.get(ongoingResearchId);
+          if (reportMessageId) {
+            const reportMsg = getMessage(reportMessageId);
+            if (reportMsg?.isStreaming) {
+              reportMsg.isStreaming = false;
+              updateMessage(reportMsg);
+            }
+          }
         }
         continue;
       }

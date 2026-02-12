@@ -22,7 +22,7 @@ if _debug_mode:
     logging.getLogger("langchain").setLevel(logging.DEBUG)
     logging.getLogger("langgraph").setLevel(logging.DEBUG)
 
-from fastapi import FastAPI, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from langchain_core.messages import AIMessageChunk, BaseMessage, ToolMessage
@@ -36,7 +36,7 @@ from psycopg_pool import AsyncConnectionPool
 from src.config.configuration import get_recursion_limit
 from src.config.loader import get_bool_env, get_int_env, get_str_env
 from src.config.report_style import ReportStyle
-from src.config.tools import SELECTED_RAG_PROVIDER
+from src.config.tools import RAGProvider, SELECTED_RAG_PROVIDER
 from src.citations import merge_citations
 from src.graph.builder import build_graph_with_memory
 from src.graph.checkpoint import chat_stream_message
@@ -50,10 +50,10 @@ from src.ppt.graph.builder import build_graph as build_ppt_graph
 from src.prompt_enhancer.graph.builder import build_graph as build_prompt_enhancer_graph
 from src.prose.graph.builder import build_graph as build_prose_graph
 from src.eval import ReportEvaluator
-from src.rag.builder import build_retriever
-from src.rag.milvus import load_examples as load_milvus_examples
-from src.rag.qdrant import load_examples as load_qdrant_examples
-from src.rag.retriever import Resource
+from src.rag import IndexResult, RAGPipeline, Resource, build_retriever
+from src.rag.intent import detect_rag_intent
+from src.rag.common.config import load_ingestion_pipeline_config
+from src.rag.common.utils import sanitize_filename
 from src.server.chat_request import (
     ChatRequest,
     EnhancePromptRequest,
@@ -236,9 +236,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],  # Use the configured list of methods
     allow_headers=["*"],  # Now allow all headers, but can be restricted further
 )
-# Load examples into RAG providers if configured
-load_milvus_examples()
-load_qdrant_examples()
 
 in_memory_store = InMemoryStore()
 graph = build_graph_with_memory()
@@ -281,6 +278,7 @@ async def chat_stream(request: ChatRequest):
             request.max_clarification_rounds,
             request.locale,
             request.interrupt_before_tools,
+            request.always_include_rag or False,
         ),
         media_type="text/event-stream",
     )
@@ -765,6 +763,21 @@ async def _stream_graph_events(
         )
 
 
+def _normalize_text_for_intent(value: Any) -> str:
+    """Normalize clarified topic (str, list of dicts, or other) to a single string for RAG intent detection."""
+    if isinstance(value, list):
+        parts = []
+        for item in value:
+            if isinstance(item, dict):
+                parts.append(item.get("text") or item.get("content") or "")
+            else:
+                parts.append(str(item))
+        return " ".join(p for p in parts if p)
+    if isinstance(value, str):
+        return value
+    return str(value or "")
+
+
 async def _astream_workflow_generator(
     messages: List[dict],
     thread_id: str,
@@ -783,6 +796,7 @@ async def _astream_workflow_generator(
     max_clarification_rounds: int,
     locale: str = "en-US",
     interrupt_before_tools: Optional[List[str]] = None,
+    always_include_rag: bool = False,
 ):
     safe_thread_id = sanitize_thread_id(thread_id)
     safe_feedback = sanitize_log_input(interrupt_feedback) if interrupt_feedback else ""
@@ -814,6 +828,11 @@ async def _astream_workflow_generator(
     safe_topic = sanitize_user_content(clarified_research_topic)
     logger.debug(f"[{safe_thread_id}] Clarified research topic: {safe_topic}")
 
+    # RAG intent detection: use clarified_research_topic (or latest message) as input
+    text_for_intent = _normalize_text_for_intent(clarified_research_topic)
+    rag_intent_detected = detect_rag_intent(text_for_intent)
+    logger.debug(f"[{safe_thread_id}] RAG intent detected: {rag_intent_detected}")
+
     # Prepare workflow input
     logger.debug(f"[{safe_thread_id}] Preparing workflow input")
     workflow_input = {
@@ -830,9 +849,12 @@ async def _astream_workflow_generator(
         "enable_clarification": enable_clarification,
         "max_clarification_rounds": max_clarification_rounds,
         "locale": locale,
+        "rag_intent_detected": rag_intent_detected,
     }
 
     if not auto_accepted_plan and interrupt_feedback:
+        # Resume path: state (including rag_intent_detected) is restored from checkpoint;
+        # we do not re-pass workflow_input fields here.
         logger.debug(f"[{safe_thread_id}] Creating resume command with interrupt_feedback: {safe_feedback}")
         resume_msg = f"[{interrupt_feedback}]"
         if messages:
@@ -855,6 +877,7 @@ async def _astream_workflow_generator(
         "max_search_results": max_search_results,
         "mcp_settings": mcp_settings,
         "enable_web_search": enable_web_search,
+        "always_include_rag": always_include_rag,
         "report_style": report_style.value,
         "enable_deep_thinking": enable_deep_thinking,
         "interrupt_before_tools": interrupt_before_tools,
@@ -943,7 +966,7 @@ async def _astream_workflow_generator(
         logger.debug(f"[{safe_thread_id}] Graph event streaming completed")
 
 
-def _make_event(event_type: str, data: dict[str, any]):
+def _make_event(event_type: str, data: dict[str, Any]) -> str:
     if data.get("content") == "":
         data.pop("content")
     # Ensure JSON serialization with proper encoding
@@ -1025,7 +1048,7 @@ async def text_to_speech(request: TTSRequest):
 async def generate_podcast(request: GeneratePodcastRequest):
     try:
         report_content = request.content
-        print(report_content)
+        logger.debug("generate_podcast input length: %d", len(report_content))
         workflow = build_podcast_graph()
         final_state = workflow.invoke({"input": report_content})
         audio_bytes = final_state["output"]
@@ -1039,7 +1062,7 @@ async def generate_podcast(request: GeneratePodcastRequest):
 async def generate_ppt(request: GeneratePPTRequest):
     try:
         report_content = request.content
-        print(report_content)
+        logger.debug("generate_ppt input length: %d", len(report_content))
         workflow = build_ppt_graph()
         final_state = workflow.invoke({"input": report_content, "locale": request.locale})
         generated_file_path = final_state["generated_file_path"]
@@ -1213,72 +1236,98 @@ async def rag_resources(request: Annotated[RAGResourceRequest, Query()]):
     """Get the resources of the RAG."""
     retriever = build_retriever()
     if retriever:
-        return RAGResourcesResponse(resources=retriever.list_resources(request.query))
+        resources = await retriever.list_resources_async(request.query)
+        return RAGResourcesResponse(resources=resources)
     return RAGResourcesResponse(resources=[])
 
 
-MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
-ALLOWED_EXTENSIONS = {".md", ".txt"}
+MAX_UPLOAD_SIZE_BYTES = 200 * 1024 * 1024  # 200 MB (MinerU limit)
+MAX_FILES_PER_REQUEST = 200  # Max files per request (MinerU batch limit)
+ALLOWED_EXTENSIONS = {".doc", ".docx", ".pdf", ".ppt", ".pptx"}
 
 
-def _sanitize_filename(filename: str) -> str:
-    """Sanitize filename to prevent path traversal attacks."""
-    # Extract only the base filename, removing any path components
-    basename = os.path.basename(filename)
-    # Remove any null bytes or other dangerous characters
-    sanitized = basename.replace("\x00", "").strip()
-    # Ensure filename is not empty after sanitization
-    if not sanitized or sanitized in (".", ".."):
-        return "unnamed_file"
-    return sanitized
+def _unique_file_id(safe_filename: str, seen: set) -> str:
+    """If safe_filename exists in seen, return stem_2.pdf / stem_3.pdf etc. for uniqueness."""
+    if safe_filename not in seen:
+        seen.add(safe_filename)
+        return safe_filename
+    stem = os.path.splitext(safe_filename)[0] or "file"
+    ext = os.path.splitext(safe_filename)[1]
+    n = 2
+    while True:
+        candidate = f"{stem}_{n}{ext}" if ext else f"{stem}_{n}"
+        if candidate not in seen:
+            seen.add(candidate)
+            return candidate
+        n += 1
 
 
-@app.post("/api/rag/upload", response_model=Resource)
-async def upload_rag_resource(file: UploadFile):
-    # Validate filename exists
-    if not file.filename:
+@app.post("/api/rag/upload", response_model=IndexResult)
+async def upload_rag_resource(
+    file: Annotated[UploadFile | None, File()] = None,
+    files: Annotated[List[UploadFile] | None, File()] = None,
+):
+    """Accept single file or multiple files/directory; if both given, files takes precedence."""
+    if files is not None and len(files) > 0:
+        items = list(files)
+    elif file is not None:
+        items = [file]
+    else:
         raise HTTPException(status_code=400, detail="Filename is required for upload")
 
-    # Sanitize filename to prevent path traversal
-    safe_filename = _sanitize_filename(file.filename)
-
-    # Validate file extension
-    _, ext = os.path.splitext(safe_filename.lower())
-    if ext not in ALLOWED_EXTENSIONS:
+    if len(items) > MAX_FILES_PER_REQUEST:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid file type. Only {', '.join(ALLOWED_EXTENSIONS)} files are allowed.",
+            detail=f"Too many files in one request (max={MAX_FILES_PER_REQUEST})",
         )
 
-    # Read content with size limit check
-    content = await file.read()
-    if len(content) == 0:
-        raise HTTPException(status_code=400, detail="Cannot upload an empty file")
-    if len(content) > MAX_UPLOAD_SIZE_BYTES:
+    pipeline_config = load_ingestion_pipeline_config()
+    parser_config = pipeline_config.get("parser") or {}
+    if not parser_config.get("api_token"):
         raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MB.",
+            status_code=400,
+            detail="RAG pipeline not configured: parse api_token missing",
         )
-
+    if SELECTED_RAG_PROVIDER == RAGProvider.QDRANT.value:
+        raise HTTPException(
+            status_code=501,
+            detail="Ingest not supported for provider: qdrant",
+        )
     retriever = build_retriever()
     if not retriever:
         raise HTTPException(status_code=500, detail="RAG provider not configured")
+
+    seen_file_ids: set = set()
+    files_or_bytes_list: List[tuple] = []
+    for f in items:
+        if not f.filename:
+            raise HTTPException(status_code=400, detail="Filename is required for upload")
+        safe = sanitize_filename(f.filename)
+        file_id = _unique_file_id(safe, seen_file_ids)
+        _, ext = os.path.splitext(file_id.lower())
+        if ext not in ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file type. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+            )
+        content = await f.read()
+        if len(content) == 0:
+            raise HTTPException(status_code=400, detail="Cannot upload an empty file")
+        if len(content) > MAX_UPLOAD_SIZE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MB.",
+            )
+        files_or_bytes_list.append((content, file_id))
+
     try:
-        return retriever.ingest_file(content, safe_filename)
-    except NotImplementedError:
-        raise HTTPException(
-            status_code=501, detail="Upload not supported by current RAG provider"
-        )
-    except ValueError as exc:
-        # Invalid user input or unsupported file content; treat as a client error
-        logger.warning("Invalid RAG resource upload: %s", exc)
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid RAG resource. Please check the file and try again.",
-        )
-    except RuntimeError as exc:
-        # Internal error during ingestion; log and return a generic server error
-        logger.exception("Runtime error while ingesting RAG resource: %s", exc)
+        if hasattr(retriever, "_ensure_connected_async"):
+            await retriever._ensure_connected_async()
+        pipeline = RAGPipeline(config=pipeline_config)
+        result = await pipeline.run_index(files_or_bytes_list, options=None)
+        return result
+    except Exception as exc:
+        logger.exception("RAG run_index failed: %s", exc)
         raise HTTPException(
             status_code=500,
             detail="Failed to ingest RAG resource due to an internal error.",
